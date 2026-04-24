@@ -54,8 +54,15 @@ idx_fact_cliente_estado: índice compuesto sobre facturas(ID_cliente, ID_estado)
 idx_u_caso_abogado: índice único sobre caso_abogado(ID_caso, ID_abogado)
 idx_u_factura_caso: índice único sobre factura_caso(ID_factura, ID_caso)
 
+Módulo 5 — Stored Procedures
 
-Módulo 5 — Vistas
+SP_RegistrarCliente: registra un nuevo cliente
+CrearCasoLegal: crea un caso legal y asigna el abogado principal
+ProgramarActuacionProcesal: programa una actuación para un caso activo
+RegistrarDocumentoLegal: registra un documento iniciándolo en estado Borrador
+GenerarFacturaCliente: genera una factura con cálculo automático de impuestos y total
+
+Módulo 6 — Vistas
 
 V_CasosActivosPorAbogado: casos activos asignados a cada abogado
 V_ActuacionesPendientes: actuaciones procesales pendientes por fecha
