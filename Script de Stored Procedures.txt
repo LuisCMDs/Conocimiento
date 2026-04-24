@@ -1,0 +1,388 @@
+Script de Stored Procedures
+
+sql-- ============================================================
+-- 1. SP_RegistrarCliente
+-- ============================================================
+
+DELIMITER $$
+
+CREATE PROCEDURE SP_RegistrarCliente(
+IN p_Codigo VARCHAR(50),
+IN p_ID_tipo_cliente VARCHAR(50),
+IN p_Nombre VARCHAR(50),
+IN p_Documento VARCHAR(20),
+IN p_Direccion VARCHAR(10),
+IN p_Telefono VARCHAR(15),
+IN p_Email VARCHAR(50),
+IN p_Fecha_primer_contacto DATE,
+IN p_Referido_por VARCHAR(30),
+IN p_ID_sector INT,
+IN p_Clasificacion VARCHAR(40),
+OUT nuevo_id INT
+)
+BEGIN
+
+INSERT INTO Clientes (Codigo, ID_tipo_cliente, Nombre, Documento, Direccion, Telefono, Email, Fecha_primer_contacto, Referido_por, ID_sector, Clasificacion)
+VALUES (p_Codigo, p_ID_tipo_cliente, p_Nombre, p_Documento, p_Direccion, p_Telefono, p_Email, p_Fecha_primer_contacto, p_Referido_por, p_ID_sector, p_Clasificacion);
+
+-- obtener el id del cliente recién insertado
+SET nuevo_id = LAST_INSERT_ID();
+
+-- mostrar mensaje
+SELECT CONCAT('Cliente agregado con ID: ', nuevo_id) AS Mensaje;
+
+END$$
+
+DELIMITER ;
+
+
+-- ============================================================
+-- 2. CrearCasoLegal
+-- ============================================================
+
+DELIMITER $$
+
+CREATE PROCEDURE CrearCasoLegal(
+IN p_Titulo VARCHAR(30),
+IN p_ID_tipo_caso INT,
+IN p_ID_rama_derecho INT,
+IN p_Fecha_apertura DATE,
+IN p_ID_cliente INT,
+IN p_Contraparte VARCHAR(50),
+IN p_Juzgado VARCHAR(50),
+IN p_Expediente_externo VARCHAR(33),
+IN p_ID_abogado_principal INT,
+IN p_Fecha_estimada DATE,
+OUT p_ID_caso_generado INT
+)
+BEGIN
+DECLARE v_ID_estado_activo INT;
+
+-- obtenemos el id del estado 'activo'
+SELECT ID INTO v_ID_estado_activo
+FROM estados_caso
+WHERE Estado = 'Activo'
+LIMIT 1;
+
+-- validamos que el cliente exista
+IF NOT EXISTS (SELECT 1 FROM clientes WHERE ID = p_ID_cliente) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El cliente especificado no existe.';
+END IF;
+
+-- validamos que el abogado principal exista
+IF NOT EXISTS (SELECT 1 FROM abogados WHERE ID = p_ID_abogado_principal) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El abogado principal especificado no existe.';
+END IF;
+
+-- insertamos el caso
+INSERT INTO casos (Titulo, ID_tipo_caso, ID_rama_derecho, Fecha_apertura, ID_cliente, Contraparte, Juzgado, Expediente_externo, ID_abogado_principal, ID_estado, Fecha_estimada)
+VALUES (p_Titulo, p_ID_tipo_caso, p_ID_rama_derecho, p_Fecha_apertura, p_ID_cliente, p_Contraparte, p_Juzgado, p_Expediente_externo, p_ID_abogado_principal, v_ID_estado_activo, p_Fecha_estimada);
+
+-- obtenemos el id del caso recién insertado
+SET p_ID_caso_generado = LAST_INSERT_ID();
+
+-- registramos al abogado principal en la tabla caso_abogado
+INSERT INTO caso_abogado (ID_caso, ID_abogado, Rol)
+VALUES (p_ID_caso_generado, p_ID_abogado_principal, 'Principal');
+
+-- mostramos un resumen del caso creado
+SELECT
+p_ID_caso_generado AS ID_caso,
+p_Titulo AS Titulo,
+p_Expediente_externo AS Expediente,
+'Activo' AS Estado,
+CONCAT('Caso creado con ID: ', p_ID_caso_generado) AS Mensaje;
+
+END$$
+
+DELIMITER ;
+
+-- ejecutamos el procedimiento
+SET @id_caso = NULL;
+CALL CrearCasoLegal(
+'Ruiz vs Banco',
+1,
+1,
+'2025-04-24',
+3,
+'Banco XYZ',
+'Juzgado 3 Civil',
+'EXP-2025-005',
+2,
+'2026-01-01',
+@id_caso
+);
+
+-- vemos el id generado
+SELECT @id_caso AS NuevoCasoID;
+
+-- verificamos que se creó correctamente
+SELECT * FROM casos WHERE ID = @id_caso;
+
+-- verificamos que el abogado quedó asignado
+SELECT * FROM caso_abogado WHERE ID_caso = @id_caso;
+
+
+-- ============================================================
+-- 3. ProgramarActuacionProcesal
+-- ============================================================
+
+DELIMITER $$
+
+CREATE PROCEDURE ProgramarActuacionProcesal(
+IN p_ID_caso INT,
+IN p_ID_tipo_actuacion INT,
+IN p_Fecha DATETIME,
+IN p_Lugar VARCHAR(30),
+IN p_Descripcion TEXT,
+IN p_Siguiente_paso TEXT,
+IN p_Fecha_limite DATE,
+OUT p_ID_actuacion_generada INT
+)
+BEGIN
+
+-- confirmamos que el caso exista y esté activo
+IF NOT EXISTS (
+    SELECT 1 FROM casos c
+    INNER JOIN estados_caso e ON c.ID_estado = e.ID
+    WHERE c.ID = p_ID_caso AND e.Estado = 'Activo'
+) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El caso no existe o no está en estado Activo.';
+END IF;
+
+-- validamos que el tipo de actuación exista
+IF NOT EXISTS (SELECT 1 FROM tipos_actuacion WHERE ID = p_ID_tipo_actuacion) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El tipo de actuación especificado no existe.';
+END IF;
+
+-- se inserta la actuacion
+INSERT INTO actuaciones (ID_caso, ID_tipo_actuacion, Fecha, Lugar, Descripcion, Siguiente_paso, Fecha_limite)
+VALUES (p_ID_caso, p_ID_tipo_actuacion, p_Fecha, p_Lugar, p_Descripcion, p_Siguiente_paso, p_Fecha_limite);
+
+-- se obtiene el id de la actuacion recién insertada
+SET p_ID_actuacion_generada = LAST_INSERT_ID();
+
+-- se muestra resumen
+SELECT
+p_ID_actuacion_generada AS ID_actuacion,
+p_ID_caso AS ID_caso,
+p_Fecha AS Fecha_programada,
+p_Lugar AS Lugar,
+CONCAT('Actuación programada con ID: ', p_ID_actuacion_generada) AS Mensaje;
+
+END$$
+
+DELIMITER ;
+
+-- ejecutar el procedimiento
+SET @id_actuacion = NULL;
+CALL ProgramarActuacionProcesal(
+2,
+1,
+'2025-06-01 10:00:00',
+'Juzgado Laboral',
+'Presentación de pruebas despido injusto',
+'Preparar documentos para siguiente audiencia',
+'2025-06-15',
+@id_actuacion
+);
+
+-- mostrar el id generado
+SELECT @id_actuacion AS NuevaActuacionID;
+
+-- ver si se creó
+SELECT * FROM actuaciones WHERE ID = @id_actuacion;
+
+
+-- ============================================================
+-- 4. RegistrarDocumentoLegal
+-- ============================================================
+
+DELIMITER $$
+
+CREATE PROCEDURE RegistrarDocumentoLegal(
+IN p_ID_tipo_documento INT,
+IN p_ID_caso INT,
+IN p_Titulo VARCHAR(150),
+IN p_Autor VARCHAR(100),
+IN p_Fecha_creacion DATE,
+IN p_Version_documento VARCHAR(20),
+IN p_Contenido TEXT,
+IN p_Confidencialidad VARCHAR(50),
+OUT p_ID_documento_generado INT
+)
+BEGIN
+DECLARE v_ID_estado_borrador INT;
+
+-- obtener el id del estado 'borrador'
+SELECT ID INTO v_ID_estado_borrador
+FROM estados_documento
+WHERE Estado = 'Borrador'
+LIMIT 1;
+
+-- valida si el caso existe
+IF NOT EXISTS (SELECT 1 FROM casos WHERE ID = p_ID_caso) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El caso especificado no existe.';
+END IF;
+
+-- valida que el tipo de documento exista
+IF NOT EXISTS (SELECT 1 FROM tipos_documento WHERE ID = p_ID_tipo_documento) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El tipo de documento especificado no existe.';
+END IF;
+
+-- insertar los datos
+INSERT INTO documentos (ID_tipo_documento, ID_caso, Titulo, Autor, Fecha_creacion, Version_documento, ID_estado, Contenido, Confidencialidad)
+VALUES (p_ID_tipo_documento, p_ID_caso, p_Titulo, p_Autor, p_Fecha_creacion, p_Version_documento, v_ID_estado_borrador, p_Contenido, p_Confidencialidad);
+
+-- para obtener el id del documento recién insertado
+SET p_ID_documento_generado = LAST_INSERT_ID();
+
+-- muestra el resumen
+SELECT
+p_ID_documento_generado AS ID_documento,
+p_Titulo AS Titulo,
+p_ID_caso AS ID_caso,
+p_Autor AS Autor,
+p_Version_documento AS Version,
+'Borrador' AS Estado_inicial,
+CONCAT('Documento registrado con ID: ', p_ID_documento_generado) AS Mensaje;
+
+END$$
+
+DELIMITER ;
+
+-- ejecuta el procedimiento
+SET @id_documento = NULL;
+CALL RegistrarDocumentoLegal(
+2,
+2,
+'Demanda despido Empresa XYZ',
+'Pedro Ramírez',
+'2025-04-24',
+'v1.0',
+'Demanda por despido sin justa causa',
+'Alta',
+@id_documento
+);
+
+-- ver el id generado
+SELECT @id_documento AS NuevoDocumentoID;
+
+-- verificar que se creó
+SELECT * FROM documentos WHERE ID = @id_documento;
+
+
+-- ============================================================
+-- 5. GenerarFacturaCliente
+-- ============================================================
+
+DELIMITER $$
+
+CREATE PROCEDURE GenerarFacturaCliente(
+IN p_ID_cliente INT,
+IN p_ID_caso INT,
+IN p_ID_abogado INT,
+IN p_Descripcion TEXT,
+IN p_Horas DECIMAL(5,2),
+IN p_Gastos_reembolsables DECIMAL(10,2),
+IN p_Periodo VARCHAR(25),
+IN p_Porcentaje_impuesto DECIMAL(5,2),
+OUT p_ID_factura_generada INT,
+OUT p_Total DECIMAL(10,2)
+)
+BEGIN
+DECLARE v_Tarifa_hora DECIMAL(10,2);
+DECLARE v_Subtotal DECIMAL(10,2);
+DECLARE v_Impuestos DECIMAL(10,2);
+DECLARE v_ID_estado INT;
+
+-- obtenemos el estado de pago disponible
+SELECT ID INTO v_ID_estado FROM estados_pago LIMIT 1;
+
+-- validamos que el cliente exista
+IF NOT EXISTS (SELECT 1 FROM clientes WHERE ID = p_ID_cliente) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El cliente especificado no existe.';
+END IF;
+
+-- validamos que el caso pertenezca al cliente
+IF NOT EXISTS (SELECT 1 FROM casos WHERE ID = p_ID_caso AND ID_cliente = p_ID_cliente) THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El caso no pertenece al cliente especificado.';
+END IF;
+
+-- obtenemos la tarifa por hora del abogado
+SELECT Tarifa_hora INTO v_Tarifa_hora
+FROM abogados
+WHERE ID = p_ID_abogado;
+
+IF v_Tarifa_hora IS NULL THEN
+    SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Error: El abogado no existe o no tiene tarifa registrada.';
+END IF;
+
+-- calculamos los montos
+SET v_Subtotal  = (p_Horas * v_Tarifa_hora) + p_Gastos_reembolsables;
+SET v_Impuestos = v_Subtotal * (p_Porcentaje_impuesto / 100);
+SET p_Total     = v_Subtotal + v_Impuestos;
+
+-- insertamos la factura
+INSERT INTO facturas (Fecha, ID_cliente, Gastos_reembolsables, Periodo, Subtotal, Impuestos, Total, ID_estado)
+VALUES (CURDATE(), p_ID_cliente, p_Gastos_reembolsables, p_Periodo, v_Subtotal, v_Impuestos, p_Total, v_ID_estado);
+
+-- obtenemos el id de la factura recién insertada
+SET p_ID_factura_generada = LAST_INSERT_ID();
+
+-- registramos el detalle de la factura
+INSERT INTO factura_detalle (ID_factura, ID_abogado, Descripcion, Horas, Tarifa)
+VALUES (p_ID_factura_generada, p_ID_abogado, p_Descripcion, p_Horas, v_Tarifa_hora);
+
+-- vinculamos la factura con el caso
+INSERT INTO factura_caso (ID_factura, ID_caso)
+VALUES (p_ID_factura_generada, p_ID_caso);
+
+-- mostramos el resumen de la factura generada
+SELECT
+p_ID_factura_generada AS ID_factura,
+p_ID_cliente AS ID_cliente,
+p_Periodo AS Periodo,
+p_Horas AS Horas_trabajadas,
+v_Tarifa_hora AS Tarifa_hora,
+v_Subtotal AS Subtotal,
+v_Impuestos AS Impuestos,
+p_Total AS Total,
+CONCAT('Factura generada con ID: ', p_ID_factura_generada) AS Mensaje;
+
+END$$
+
+DELIMITER ;
+
+-- ejecuta el procedimiento
+SET @id_factura = NULL;
+SET @total = NULL;
+CALL GenerarFacturaCliente(
+3,
+2,
+2,
+'Representación legal caso despido injusto',
+5.0,
+20000.00,
+'Abril 2025',
+19.00,
+@id_factura,
+@total
+);
+
+-- ve los resultados
+SELECT
+@id_factura AS NuevaFacturaID,
+@total AS TotalFactura;
+
+-- verifica que se creó
+SELECT * FROM facturas WHERE ID = @id_factura;
