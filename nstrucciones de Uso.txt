@@ -1,4 +1,4 @@
-nstrucciones de Uso
+INSTRUCCIONES DE USO!
 Requisitos
 
 MariaDB 10.x o MySQL 8.x
