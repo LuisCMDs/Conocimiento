@@ -1,0 +1,231 @@
+Script de Vistas
+
+-- ====================================================
+-- 1. vista: casos activos asignados a cada abogado
+-- ====================================================
+
+-- insert necesario para que la vista muestre datos
+INSERT INTO caso_abogado (ID_caso, ID_abogado, Rol) VALUES
+(1, 1, 'Principal'),
+(2, 3, 'Principal'),
+(3, 4, 'Principal'),
+(4, 2, 'Principal');
+
+CREATE VIEW V_CasosActivosPorAbogado AS
+SELECT
+a.ID AS ID_abogado,
+CONCAT(a.Nombres, ' ', a.Apellidos) AS Abogado,
+e.Especialidad,
+c.ID AS ID_caso,
+c.Titulo AS Caso,
+c.Fecha_apertura,
+c.Fecha_estimada,
+rd.Rama_derecho,
+tc.Tipo_caso,
+cl.Nombre AS Cliente,
+c.Contraparte,
+c.Juzgado,
+c.Expediente_externo
+FROM abogados a
+INNER JOIN caso_abogado ca ON a.ID = ca.ID_abogado
+INNER JOIN casos c ON ca.ID_caso = c.ID
+INNER JOIN estados_caso ec ON c.ID_estado = ec.ID
+INNER JOIN especialidades e ON a.ID_especialidad = e.ID
+INNER JOIN ramas_derecho rd ON c.ID_rama_derecho = rd.ID
+INNER JOIN tipos_caso tc ON c.ID_tipo_caso = tc.ID
+INNER JOIN clientes cl ON c.ID_cliente = cl.ID
+WHERE ec.Estado = 'Activo'
+ORDER BY a.Apellidos, c.Fecha_apertura;
+
+-- consultamos la vista
+SELECT * FROM V_CasosActivosPorAbogado;
+
+-- filtramos por abogado específico
+SELECT * FROM V_CasosActivosPorAbogado
+WHERE Abogado = 'Pedro Ramírez';
+
+
+-- ======================================================
+-- 2. vista: actuaciones procesales pendientes por fecha
+-- ======================================================
+
+CREATE VIEW V_ActuacionesPendientes AS
+SELECT
+ac.ID AS ID_actuacion,
+ac.Fecha AS Fecha_actuacion,
+ac.Fecha_limite,
+ac.Lugar,
+ta.Tipo_actuacion,
+ac.Descripcion,
+ac.Siguiente_paso,
+c.ID AS ID_caso,
+c.Titulo AS Caso,
+c.Expediente_externo,
+CONCAT(a.Nombres, ' ', a.Apellidos) AS Abogado_principal,
+cl.Nombre AS Cliente
+FROM actuaciones ac
+INNER JOIN casos c ON ac.ID_caso = c.ID
+INNER JOIN estados_caso ec ON c.ID_estado = ec.ID
+INNER JOIN tipos_actuacion ta ON ac.ID_tipo_actuacion = ta.ID
+INNER JOIN abogados a ON c.ID_abogado_principal = a.ID
+INNER JOIN clientes cl ON c.ID_cliente = cl.ID
+WHERE ac.Resultado IS NULL
+AND ac.Fecha >= NOW()
+ORDER BY ac.Fecha ASC;
+
+-- consultamos la vista completa
+SELECT * FROM V_ActuacionesPendientes;
+
+-- actuaciones de los próximos 30 días
+SELECT * FROM V_ActuacionesPendientes
+WHERE Fecha_actuacion <= DATE_ADD(NOW(), INTERVAL 30 DAY);
+
+-- filtramos por caso específico
+SELECT * FROM V_ActuacionesPendientes
+WHERE ID_caso = 2;
+
+
+-- ===================================================
+-- 3. vista: documentos asociados a cada caso legal
+-- ===================================================
+
+CREATE VIEW V_DocumentosPorCaso AS
+SELECT
+c.ID AS ID_caso,
+c.Titulo AS Caso,
+c.Expediente_externo,
+ec.Estado AS Estado_caso,
+d.ID AS ID_documento,
+d.Titulo AS Documento,
+td.Descripcion AS Tipo_documento,
+d.Autor,
+d.Fecha_creacion,
+d.Version_documento,
+ed.Estado AS Estado_documento,
+d.Confidencialidad,
+cl.Nombre AS Cliente,
+CONCAT(a.Nombres, ' ', a.Apellidos) AS Abogado_principal
+FROM documentos d
+INNER JOIN casos c ON d.ID_caso = c.ID
+INNER JOIN tipos_documento td ON d.ID_tipo_documento = td.ID
+INNER JOIN estados_documento ed ON d.ID_estado = ed.ID
+INNER JOIN estados_caso ec ON c.ID_estado = ec.ID
+INNER JOIN clientes cl ON c.ID_cliente = cl.ID
+INNER JOIN abogados a ON c.ID_abogado_principal = a.ID
+ORDER BY c.ID, d.Fecha_creacion DESC;
+
+-- consultamos la vista completa
+SELECT * FROM V_DocumentosPorCaso;
+
+-- filtramos por caso específico
+SELECT * FROM V_DocumentosPorCaso
+WHERE ID_caso = 1;
+
+-- filtramos por estado del documento
+SELECT * FROM V_DocumentosPorCaso
+WHERE Estado_documento = 'Final';
+
+-- filtramos por confidencialidad alta
+SELECT * FROM V_DocumentosPorCaso
+WHERE Confidencialidad = 'Alta';
+
+
+-- ========================================================
+-- 4. vista: detalle de servicios pendientes de facturación
+-- ========================================================
+
+CREATE VIEW V_FacturacionPendiente AS
+SELECT
+f.ID AS ID_factura,
+f.Fecha,
+f.Periodo,
+cl.ID AS ID_cliente,
+cl.Nombre AS Cliente,
+cl.Email,
+cl.Telefono,
+fd.Horas,
+fd.Tarifa AS Tarifa_hora,
+CONCAT(a.Nombres, ' ', a.Apellidos) AS Abogado,
+fd.Descripcion AS Servicio,
+f.Gastos_reembolsables,
+f.Subtotal,
+f.Impuestos,
+f.Total,
+ep.Estado_pago
+FROM facturas f
+INNER JOIN clientes cl ON f.ID_cliente = cl.ID
+INNER JOIN estados_pago ep ON f.ID_estado = ep.ID
+INNER JOIN factura_detalle fd ON f.ID = fd.ID_factura
+INNER JOIN abogados a ON fd.ID_abogado = a.ID
+WHERE ep.Estado_pago = 'Pendiente'
+ORDER BY f.Fecha ASC;
+
+-- consultamos la vista completa
+SELECT * FROM V_FacturacionPendiente;
+
+-- filtramos por cliente específico
+SELECT * FROM V_FacturacionPendiente
+WHERE ID_cliente = 1;
+
+-- total pendiente agrupado por cliente
+SELECT
+Cliente,
+COUNT(ID_factura) AS Total_facturas,
+SUM(Total) AS Monto_total_pendiente
+FROM V_FacturacionPendiente
+GROUP BY ID_cliente, Cliente
+ORDER BY Monto_total_pendiente DESC;
+
+
+-- ==================================================================
+-- 5. vista: estadísticas de rendimiento por abogado y tipo de caso
+-- ==================================================================
+
+CREATE VIEW V_EstadisticasRendimientoAbogados AS
+SELECT
+a.ID AS ID_abogado,
+CONCAT(a.Nombres, ' ', a.Apellidos) AS Abogado,
+e.Especialidad,
+a.Años_experiencia,
+a.Tarifa_hora,
+tc.Tipo_caso,
+COUNT(c.ID) AS Total_casos,
+SUM(CASE WHEN ec.Estado = 'Activo' THEN 1 ELSE 0 END) AS Casos_activos,
+SUM(CASE WHEN ec.Estado = 'Ganado' THEN 1 ELSE 0 END) AS Casos_ganados,
+SUM(CASE WHEN ec.Estado = 'Perdido' THEN 1 ELSE 0 END) AS Casos_perdidos,
+SUM(CASE WHEN ec.Estado = 'Conciliado' THEN 1 ELSE 0 END) AS Casos_conciliados,
+SUM(CASE WHEN ec.Estado = 'Cerrado' THEN 1 ELSE 0 END) AS Casos_cerrados,
+ROUND(
+    SUM(CASE WHEN ec.Estado = 'Ganado' THEN 1 ELSE 0 END) * 100.0
+    / NULLIF(COUNT(c.ID), 0), 2
+) AS Porcentaje_exito,
+COALESCE(SUM(fd.Horas), 0) AS Total_horas_facturadas,
+COALESCE(SUM(fd.Horas * fd.Tarifa), 0) AS Total_facturado
+FROM abogados a
+INNER JOIN especialidades e ON a.ID_especialidad = e.ID
+INNER JOIN caso_abogado ca ON a.ID = ca.ID_abogado
+INNER JOIN casos c ON ca.ID_caso = c.ID
+INNER JOIN estados_caso ec ON c.ID_estado = ec.ID
+INNER JOIN tipos_caso tc ON c.ID_tipo_caso = tc.ID
+LEFT JOIN factura_detalle fd ON a.ID = fd.ID_abogado
+GROUP BY a.ID, a.Nombres, a.Apellidos, e.Especialidad, a.Años_experiencia, a.Tarifa_hora, tc.Tipo_caso
+ORDER BY Porcentaje_exito DESC, Total_casos DESC;
+
+-- consultamos toda la vista para ver el rendimiento general
+SELECT * FROM V_EstadisticasRendimientoAbogados;
+
+-- acá nos enfocamos en un abogado en particular
+SELECT * FROM V_EstadisticasRendimientoAbogados
+WHERE Abogado = 'Laura Gómez';
+
+-- armamos un ranking ordenado por casos ganados y porcentaje de éxito
+SELECT
+Abogado,
+Especialidad,
+Total_casos,
+Casos_ganados,
+Porcentaje_exito,
+Total_horas_facturadas,
+Total_facturado
+FROM V_EstadisticasRendimientoAbogados
+ORDER BY Casos_ganados DESC, Porcentaje_exito DESC;
