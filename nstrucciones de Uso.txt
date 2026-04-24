@@ -1,0 +1,44 @@
+nstrucciones de Uso
+Requisitos
+
+MariaDB 10.x o MySQL 8.x
+Cliente SQL: HeidiSQL, MySQL Workbench o DBeaver
+
+Paso 1 — Ejecutar el script principal
+Copiar y ejecutar el script de la sección Script de la Base de Datos. Crea la base de datos, todas las tablas, índices y datos de prueba.
+
+Paso 2 — Ejecutar los Stored Procedures
+Copiar y ejecutar cada procedimiento de la sección Script de Stored Procedures por separado, desde DELIMITER $$ hasta DELIMITER ;.
+
+En HeidiSQL: seleccionar el bloque completo de cada procedimiento y presionar F9.
+
+Paso 3 — Ejecutar las Vistas
+Copiar y ejecutar cada CREATE VIEW de la sección Script de Vistas. Las vistas no necesitan DELIMITER.
+
+Paso 4 — Llamar los procedimientos
+
+-- registrar un cliente
+SET @id = NULL;
+CALL SP_RegistrarCliente('006', 1, 'Ana Ruiz', '7778899', 'Cra 5', '3119998877', 'ana@email.com', '2025-04-24', NULL, 1, 'Regular', @id);
+SELECT @id AS NuevoClienteID;
+
+-- crear un caso
+SET @id_caso = NULL;
+CALL CrearCasoLegal('Ruiz vs Banco', 1, 1, '2025-04-24', 3, 'Banco XYZ', 'Juzgado 3 Civil', 'EXP-2025-005', 2, '2026-01-01', @id_caso);
+SELECT @id_caso AS NuevoCasoID;
+
+-- programar una actuación
+SET @id_actuacion = NULL;
+CALL ProgramarActuacionProcesal(2, 1, '2025-06-01 10:00:00', 'Juzgado Laboral', 'Presentación de pruebas', 'Preparar documentos', '2025-06-15', @id_actuacion);
+SELECT @id_actuacion AS NuevaActuacionID;
+
+-- registrar un documento
+SET @id_doc = NULL;
+CALL RegistrarDocumentoLegal(2, 2, 'Demanda XYZ', 'Pedro Ramírez', '2025-04-24', 'v1.0', 'Demanda por despido', 'Alta', @id_doc);
+SELECT @id_doc AS NuevoDocumentoID;
+
+-- generar una factura
+SET @id_factura = NULL;
+SET @total = NULL;
+CALL GenerarFacturaCliente(3, 2, 2, 'Representación legal', 5.0, 20000.00, 'Abril 2025', 19.00, @id_factura, @total);
+SELECT @id_factura AS NuevaFacturaID, @total AS TotalFactura;
