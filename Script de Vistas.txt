@@ -1,4 +1,4 @@
-Script de Vistas
+Script de Vistass
 
 -- ====================================================
 -- 1. vista: casos activos asignados a cada abogado
