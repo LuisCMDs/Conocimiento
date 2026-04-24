@@ -1,4 +1,6 @@
 # Conocimiento
+EL SCRIpT De la base de datos
+
 # SCRIPT DE LA BASE DE DATOS
 CREATE DATABASE Lawfirm;
 USE Lawfirm;
